@@ -1,0 +1,19 @@
+{
+  "name": "lambda-setup-cloudformation",
+  "version": "1.0.0",
+  "description": "Setup for lambda on AWS using node, and creating code pipeline CI/CD",
+  "main": "HelloWorld.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jackstine/lambda-setup-cloudformation.git"
+  },
+  "author": "Jake Cukjati",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jackstine/lambda-setup-cloudformation/issues"
+  },
+  "homepage": "https://github.com/jackstine/lambda-setup-cloudformation#readme"
+}

@@ -11,7 +11,7 @@ Parameters:
   LambdaRoleArn:
     Description: This is the ARN for controlling the Lambdas
     Type: String
-    Default: TODO
+    Default: arn:aws:iam::545933204633:role/LambdaRoleTutorial
 
 Globals:
   Function:

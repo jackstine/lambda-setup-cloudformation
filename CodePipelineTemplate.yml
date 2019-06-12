@@ -1,0 +1,392 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform:
+- AWS::Serverless-2016-10-31
+
+# This template's main purpose is to link to a Github account, and apply CI/CD
+# and deploy the github's lambda functions
+# REQUIREMENTS
+# github must have the following files
+#   1. template.yml
+#   2. buildspec.yml
+#   3. required parameters information
+
+# 1. the template.yml is the template used to create the github stack and lambdas
+# 2. the buildspec.yml is the buildspec used to build the software resources and build the code for the lambdas
+# the buildspec should look like the following, you can change it when needed for the runtime-version
+#**************************************************************************************************
+# version: 0.2
+# phases:
+#   install:
+#     runtime-versions:
+#       nodejs: 10
+#     commands:
+#       - npm install
+#   post_build:
+#     commands:
+#       - aws cloudformation package --template template.yml --s3-bucket $S3_BUCKET --output-template template-export.json
+# artifacts:
+#   files:
+#     - template-export.json
+#****************************************************************************************************
+# Here is an example of a template.yml
+# ***************************************************************************************************
+# AWSTemplateFormatVersion: '2010-09-09'
+# Transform:
+# - AWS::Serverless-2016-10-31
+
+# Description: CodePipelineTemplate, used as a template for generating automated code pipelines
+# Parameters:
+#   Author:
+#     Description: The Author of this code
+#     Type: String
+#     Default: Jake Cukjati
+#   LambdaRoleArn:
+#     Description: This is the ARN for controlling the Lambdas
+#     Type: String  # if you use the ARN please use String
+#     Default: # ARN of the Lambda role !Ref BasicLambdaRoleName
+
+# Globals:
+#   Function:
+#     Runtime: nodejs10.x
+#     Timeout: 30
+
+# Resources:
+#   HelloWorldLambda:
+#     Type: AWS::Serverless::Function
+#     Properties:
+#       Handler: HelloWorld.helloWorld
+#       FunctionName: 'HelloWorld'
+#       Role: !Ref LambdaRoleArn
+#*******************************************************************************************************
+
+Description: CodePipelineTemplate, used as a template for generating automated code pipelines
+Parameters:
+  PipelineName:
+    Description: Name of the Code Pipeline
+    Type: String
+    Default: CodePipelineTemplateTutorial
+  CodePipelineRoleName:
+    Description: The Name of the Role that you will be building for the code pipeline
+    Type: String
+    Default: CodePipelineRoleTutorial
+  CodeBuildRoleName:
+    Description: The Name of the Role that you will be building for the code Build
+    Type: String
+    Default: CodeBuildRoleTutorial
+  CloudFormationRoleName:
+    Description: The Name of the Role that you will be building for the CloudFormation templates
+    Type: String
+    Default: CloudFormationRoleTutorial
+  BasicLambdaRoleName:
+    Description: The name of the Lambda Role that will be used in your lambdas
+    Type: String
+    Default: LambdaRoleTutorial
+  GitHubOwner:
+    Description: The Github owner account
+    Type: String
+    Default: jackstine
+  GitHubRepo:
+    Description: The Github repo
+    Type: String
+    Default: lambda-setup-cloudformation
+  GitHubBranch:
+    Description: the Github repo branch that this will trigger from
+    Type: String
+    Default: master
+  GithubOAthToken:
+    Description: the OAuthToken for the Github
+    Type: String
+    Default: 9509c70517fe6f81315fdbd24b9a3322493cc12a
+  CodeBuildName:
+    Description: the name of the code build project generated
+    Type: String
+    Default: node-tutorial-build
+  CloudFormationStackName:
+    Description: The name of the stack to be created by the cloud formation engine
+    Type: String
+    Default: node-code-pipeline-tutorial-stack
+  ChangeSetName:
+    Description: The name of the changeset that you are going to create in the stack
+    Type: String
+    Default: node-tutorial-changeset
+  CodeBuildImage:
+    Description: The image that the code Build will use to generate your code
+    Type: String
+    Default: aws/codebuild/standard:2.0
+  LambdaS3Location: # Note can be a generic bucket location for all templates
+    Description: The location where to package your github resources for lambda deployment
+    Type: String
+    Default: lambdas-tutorial
+  CodePipelineArtifactStore:
+    Description: The location where the codepipeline artifacts are stored
+    Type: String
+    Default: cp-artifact-store-tutorial
+
+Resources:
+  BasicLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref BasicLambdaRoleName
+      AssumeRolePolicyDocument: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ]
+        }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref CodePipelineRoleName
+      AssumeRolePolicyDocument: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Principal": {
+                "Service": "codepipeline.amazonaws.com"
+              }
+            }
+          ]
+        }
+      Policies:
+        -
+          PolicyName: CodePipelineRoot
+          PolicyDocument: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "codebuild:*",
+                    "cloudformation:*",
+                    "ssm:Get*"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCodePipelineFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref CodeBuildRoleName
+      AssumeRolePolicyDocument: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Principal": {
+                "Service": "codebuild.amazonaws.com"
+              }
+            }
+          ]
+        }
+      Policies:
+        -
+          PolicyName: CodeBuildRoot
+          PolicyDocument: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:Put*",
+                    "logs:Create*",
+                    "s3:Put*",
+                    "s3:Get*"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref CloudFormationRoleName
+      AssumeRolePolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["sts:AssumeRole"],
+              "Principal": {
+                "Service": "cloudformation.amazonaws.com"
+              }
+            }
+          ]
+        }
+      Policies:
+        -
+          PolicyName: CloudFormationRole
+          PolicyDocument: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": ["*"],
+                  "Resource": "*"
+                }
+              ]
+            }
+  CodeBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref CodeBuildName
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Description: Used to Generate the Code for the CodePipeline, Comes with its own template
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: !Ref CodeBuildImage
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          -
+            Name: S3_BUCKET
+            Value: !Ref LambdaS3Location
+      Source:
+        Type: CODEPIPELINE
+      Artifacts:
+        Type: CODEPIPELINE
+  LambdaS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref LambdaS3Location
+  CodepipelineartifactStore:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref CodePipelineArtifactStore
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Ref PipelineName
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Location: !Ref CodePipelineArtifactStore
+        Type: S3
+      Stages:
+        -
+          Name: Source
+          Actions:
+            -
+              Name: SourceAction
+              ActionTypeId:
+                Category: Source 
+                Owner: ThirdParty 
+                Version: 1
+                Provider: GitHub
+              OutputArtifacts:
+                -
+                  Name: SourceCode
+              Configuration:
+                Owner: !Ref GitHubOwner 
+                Repo: !Ref GitHubRepo 
+                PollForSourceChanges: false 
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GithubOAthToken
+              RunOrder: 1
+        -
+          Name: CodeBuildAction
+          Actions:
+            -
+              Name: BuildAction
+              InputArtifacts:
+                -
+                  Name: SourceCode
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              OutputArtifacts:
+                -
+                  Name: CodeBuildZip
+              Configuration:
+                ProjectName: !Ref CodeBuild
+              RunOrder: 1
+        -
+          Name: CodeDeployment
+          Actions:
+            -
+              Name: CreateStack
+              InputArtifacts: 
+                -
+                  Name: CodeBuildZip
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: REPLACE_ON_FAILURE
+                RoleArn: !GetAtt CloudFormationRole.Arn
+                Capabilities: CAPABILITY_AUTO_EXPAND
+                StackName: !Ref CloudFormationStackName
+                TemplatePath: !Join ['', ['CodeBuildZip::', 'template-export.json']]
+              RunOrder: 1
+            -
+              Name: ChangeAndReplaceStack
+              InputArtifacts: 
+                -
+                  Name: CodeBuildZip
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CHANGE_SET_REPLACE
+                ChangeSetName: !Ref ChangeSetName
+                RoleArn: !GetAtt CloudFormationRole.Arn
+                Capabilities: CAPABILITY_AUTO_EXPAND
+                StackName: !Ref CloudFormationStackName
+                TemplatePath: !Join ['', ['CodeBuildZip::', 'template-export.json']]
+              RunOrder: 2
+            -
+              Name: ExceuteChangeSet
+              InputArtifacts: 
+                -
+                  Name: CodeBuildZip
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CHANGE_SET_EXECUTE
+                ChangeSetName: !Ref ChangeSetName
+                StackName: !Ref CloudFormationStackName
+              RunOrder: 3
+  BasicLambdaRoleNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /roles/BasicLambdaRole/arn
+      Type: String
+      Value: !GetAtt BasicLambdaRole.Arn
+      Description: This is the arn for the basic lambda role

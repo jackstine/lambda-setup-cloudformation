@@ -1,0 +1,27 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform:
+- AWS::Serverless-2016-10-31
+
+Description: CodePipelineTemplate, used as a template for generating automated code pipelines
+Parameters:
+  Author:
+    Description: The Author of this code
+    Type: String
+    Default: Jake Cukjati
+  LambdaRoleArn:
+    Description: This is the ARN for controlling the Lambdas
+    Type: String
+    Default: TODO
+
+Globals:
+  Function:
+    Runtime: nodejs10.x
+    Timeout: 30
+
+Resources:
+  HelloWorldLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: HelloWorld.helloWorld
+      FunctionName: 'HelloWorld'
+      Role: !Ref LambdaRoleArn
